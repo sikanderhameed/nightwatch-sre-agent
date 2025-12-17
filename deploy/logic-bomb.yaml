@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logic-bomb
+  namespace: nightwatch-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: logic-bomb
+  template:
+    metadata:
+      labels:
+        app: logic-bomb
+    spec:
+      containers:
+      - name: app
+        image: public.ecr.aws/docker/library/alpine:latest
+        command: ["/bin/sh", "-c"]
+        # The Logic Bomb: If MODE is PROD, it checks for a real DB. If missing, it crashes.
+        args:
+          - |
+            if [ "$APP_MODE" = "PROD" ]; then
+              echo "FATAL: APP_MODE is 'PROD' but DATABASE_URL is missing. Cannot start."
+              exit 1
+            else
+              echo "Starting in DEV mode... Success."
+              sleep 3600
+            fi
+        env:
+        - name: APP_MODE
+          value: "PROD"  # <--- This is the bug
+---
+apiVersion: nightwatch.io/v1alpha1
+kind: NightwatchScaler
+metadata:
+  name: logic-bomb-watcher
+  namespace: nightwatch-system
+spec:
+  targetDeployment: logic-bomb
+  minReplicas: 1
+  maxReplicas: 5

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-app
+  namespace: nightwatch-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chaos-app
+  template:
+    metadata:
+      labels:
+        app: chaos-app
+    spec:
+      containers:
+      - name: chaos
+        image: public.ecr.aws/docker/library/python:3.9-slim
+        command: ["/bin/sh"]
+        args: ["-c", "if [ \"$MODE\" = 'CRASH' ]; then exit 1; fi; if [ \"$MODE\" = 'OOM' ]; then python -c 'a = \"a\" * 10**9'; fi; if [ \"$MODE\" = 'HANG' ]; then while true; do sleep 1; done; fi; echo 'Running...'; sleep 3600"]
+        env:
+        - name: MODE
+          value: "NORMAL"
+        resources:
+          limits:
+            memory: "100Mi" # Small limit to force OOM
+---
+apiVersion: nightwatch.io/v1alpha1
+kind: NightwatchScaler
+metadata:
+  name: chaos-watcher
+  namespace: nightwatch-system
+spec:
+  targetDeployment: chaos-app
+  minReplicas: 1
+  maxReplicas: 5

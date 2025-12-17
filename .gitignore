@@ -1,0 +1,82 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+testbin/
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# Temporary files
+tmp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE specific files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*-key.json
+secrets/
+nightwatch-secrets.yaml
+
+# API Keys (CRITICAL: Never commit these)
+*API_KEY*
+*api_key*
+*GOOGLE_API_KEY*
+*GROQ_API_KEY*
+*SLACK_WEBHOOK*
+
+# Kubernetes generated files
+config/crd/bases/*.yaml
+config/rbac/role.yaml
+config/manager/manager.yaml
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# OS specific
+Thumbs.DB
+.DS_Store
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Docker
+*.tar
+*.tar.gz
+
+# Misc
+*.bak
+*.orig

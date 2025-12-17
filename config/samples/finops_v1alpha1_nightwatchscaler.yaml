@@ -1,0 +1,9 @@
+apiVersion: finops.sikander.io/v1alpha1
+kind: NightwatchScaler
+metadata:
+  labels:
+    app.kubernetes.io/name: nightwatch-ai
+    app.kubernetes.io/managed-by: kustomize
+  name: nightwatchscaler-sample
+spec:
+  # TODO(user): Add fields here

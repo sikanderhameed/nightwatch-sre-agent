@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nightwatch-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nightwatch-secrets
+  namespace: nightwatch-system
+type: Opaque
+stringData:
+  GOOGLE_API_KEY: "REPLACE_WITH_YOUR_API_KEY"
+  SLACK_WEBHOOK: "" # Add webhook if you have one
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nightwatch-controller-manager
+  namespace: nightwatch-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nightwatch-manager-role
+rules:
+  - apiGroups: ["nightwatch.io"]
+    resources: ["nightwatchscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["nightwatch.io"]
+    resources: ["nightwatchscalers/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["nightwatch.io"]
+    resources: ["nightwatchscalers/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nightwatch-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nightwatch-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: nightwatch-controller-manager
+    namespace: nightwatch-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nightwatch-controller-manager
+  namespace: nightwatch-system
+  labels:
+    control-plane: controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: nightwatch-controller-manager
+      containers:
+        - name: manager
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/nightwatch-ai:v1
+          imagePullPolicy: Always
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nightwatch-secrets
+                  key: GOOGLE_API_KEY
+            - name: SLACK_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: nightwatch-secrets
+                  key: SLACK_WEBHOOK
+            - name: LLM_MODEL
+              value: "gemini-pro"  # Pro model (v1beta compatible)
+            - name: AUTO_EXECUTE
+              value: "true"
+            - name: CONFIDENCE_THRESHOLD
+              value: "0.80"
+            - name: SLACK_WEBHOOK_URL
+              value: "YOUR_SLACK_WEBHOOK_URL_HERE"
+            - name: PROMETHEUS_URL
+              value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+            - name: LOKI_URL
+              value: "http://loki-gateway.monitoring.svc.cluster.local:80"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
