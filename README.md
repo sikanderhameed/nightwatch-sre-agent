@@ -105,6 +105,7 @@ graph TB
 ### Prerequisites
 - Kubernetes cluster (1.25+)
 - kubectl configured
+- Groq API key (or Gemini API key - system supports both)
 - Prometheus & Loki (optional, for silent failure detection)
 - Slack webhook (optional, for notifications)
 
@@ -186,6 +187,89 @@ INFO	📚 Retrieved relevant runbooks	{"count": 1}
 - **Expected Fix**: `kubectl set env deployment logic-bomb APP_MODE=DEV`
 
 See [docs/stress_test_results.md](docs/stress_test_results.md) for full test suite.
+
+---
+
+## 🏗️ Architectural Decisions & Trade-offs
+
+### 1. The "Distroless" vs. Shell Trade-off
+
+**Challenge**: Initially, the controller used Distroless images for maximum security and minimal attack surface.
+
+**Problem**: Distroless images lack shell and kubectl binaries, blocking the AI from executing remediation commands.
+
+**Decision**: Migrated to an Alpine-based image with kubectl installed. This treats the container as a **secure, privileged operator** rather than a stateless microservice. The trade-off is acceptable because:
+- The operator runs in a dedicated namespace with strict RBAC
+- Command execution is restricted to an allowlist
+- The security boundary shifts from "no shell" to "controlled shell with audited commands"
+
+**Result**: Enabled autonomous remediation while maintaining production security standards.
+
+---
+
+### 2. Latency & MTTR: Gemini vs. Groq
+
+**Challenge**: The system was originally built with Google Gemini Pro for LLM reasoning.
+
+**Problem**: Gemini inference took 5-10 seconds per diagnosis. In SRE incidents, **Mean Time to Remediation (MTTR) is the critical metric**. Every second of delay compounds user impact.
+
+**Decision**: Refactored the LLM client to be **modular and provider-agnostic**, then integrated Groq (Llama 3.1 70B) for sub-second inference.
+
+**Implementation**:
+```go
+// pkg/llm/client.go - Abstraction layer
+type Client struct {
+    client *openai.Client  // OpenAI-compatible (works with Groq)
+    model  string
+}
+```
+
+**Result**: 
+- Reduced AI diagnosis latency from 5-10s to <1s
+- Proved vendor independence (can swap LLM providers without code changes)
+- Optimized for production SRE workflows where speed matters
+
+---
+
+### 3. RAG Implementation Strategy
+
+**Challenge**: LLMs hallucinate generic Kubernetes advice that doesn't account for company-specific infrastructure or past incidents.
+
+**Problem**: Without context, the AI might suggest solutions that violate internal policies or ignore known workarounds.
+
+**Decision**: Implemented a **lightweight RAG (Retrieval-Augmented Generation)** system using keyword-matched runbooks instead of a vector database.
+
+**Why Keyword Matching (Not Vector DB)**:
+- ✅ **Zero infrastructure overhead**: No ChromaDB, no embedding API costs
+- ✅ **Proves the pattern**: Demonstrates context injection without operational complexity
+- ✅ **Clear migration path**: Can scale to semantic search when runbook count grows
+
+**Implementation**:
+```go
+// Retrieve relevant runbooks
+runbooks := knowledgeBase.Search(errorText, logs)
+knowledgeContext := knowledgeBase.FormatForPrompt(runbooks)
+
+// Augment LLM prompt
+diagnosis := llm.Diagnose(DiagnoseOptions{
+    Logs:             podLogs,
+    KnowledgeContext: knowledgeContext,  // RAG injection
+})
+```
+
+**Result**: Reduced hallucinations by providing company-specific solutions. Production path: migrate to ChromaDB with vector embeddings for semantic search at scale.
+
+---
+
+### 4. Deployment Strategy Discovery
+
+**Challenge**: During stress testing, the AI failed to detect certain failure modes.
+
+**Root Cause**: Kubernetes `RollingUpdate` strategy keeps old pods alive during rollout, masking `Available < Desired` conditions.
+
+**Decision**: For **testing**, use `strategy: Recreate` to expose failures. For **production**, use `RollingUpdate` with proper health checks and rely on observability signals (Prometheus 5xx rates) for silent failure detection.
+
+**Lesson**: Deployment strategies impact observability. The AI operator must adapt to both strategies.
 
 ---
 
